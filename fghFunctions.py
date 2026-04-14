@@ -1,0 +1,60 @@
+from scipy import integrate
+import numpy as np
+
+from auxiliaryExp import mass, internalResistance
+from globalValues import F,R,T_ref
+
+def specificEnergy(v,i,t,M,A,Rx):
+    i = abs(i)
+    Es = A*integrate.trapezoid(i*(v-(Rx*i)),t)/M
+    return Es
+
+def lperho(data):
+    return data.l*data.p*data.rho*data.epsf
+
+def lprho(data):
+    return data.l*data.p*data.rho
+
+def batteryPrice(data_a,data_p,data_o,data_n,data_z,data_e,Ns,Np,A):
+    return Ns*Np*A*(lperho(data_p) + lperho(data_o) + lperho(data_n) 
+                    + lperho(data_e) 
+                    + lprho(data_a) + lprho(data_z))
+
+def maxTempAvg(T):
+    return np.mean(T-T_ref)
+
+def capFade(j,eta,T,mu,rho):
+    var = ((0.5*F)/(R*T))*eta
+    term2 = 2/(np.exp(2*var)-1)
+    i0 = j*term2
+    SEI_growth = i0*mu/(rho*F)
+    return np.mean(SEI_growth)
+
+def objectiveFunctions(data_a,data_p,data_o,data_n,data_z,data_e,
+                       Icell,Np,Ns,A,
+                       volt,Temps,flux,etas,Tn,times):
+
+    M = mass(data_a,data_p,data_o,data_n,data_z,data_e)
+    Rx = internalResistance(data_a,data_p,data_n,data_z)
+
+    Es = specificEnergy(volt,-Icell,times,M,A,Rx)
+    SEIg = capFade(flux,etas,Tn,data_n.mu,data_n.rho)
+    Tavg = maxTempAvg(Temps)
+    P = batteryPrice(data_a,data_p,data_o,data_n,data_z,data_e,Ns,Np,A)
+
+    return [-Es, SEIg, Tavg, P]
+
+def ineqConstraintFunctions(Vpack,Ns,Vcell, efp, efo, efn):
+    
+    V_upper = Vcell*Ns - 1.05*Vpack
+    V_lower = 0.95*Vpack - Vcell*Ns
+
+    volFrac = efp + efo + efn - 0.97
+
+    return [V_upper, V_lower, volFrac]
+
+def eqConsctraintFunctions(Vpack,Ns,Vcell):
+
+    V_eq = Vcell*Ns - Vpack
+
+    return [V_eq]
